@@ -1,0 +1,63 @@
+version: "3.8"
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssl/server.crt:/etc/nginx/ssl/server.crt:ro
+      - ./ssl/server.key:/etc/nginx/ssl/server.key:ro
+    depends_on:
+      - fujidrop
+    networks:
+      - fujidrop-network
+
+  fujidrop:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fujidrop
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Database configuration
+      - FUJIDROP_DB_PATH=/app/fujidrop.db
+      # Images configuration
+      - FUJIDROP_IMAGES_PATH=/app/images/uploads
+      # Google Photos configuration
+      - FUJIDROP_GOOGLE_CREDENTIALS_PATH=/app/backend/services/client_secret.json
+      - FUJIDROP_GOOGLE_TOKEN_PATH=/app/backend/services/token.json
+      # Upload configuration
+      - FUJIDROP_FUJI_PART_SIZE=23109632
+      # OAuth configuration
+      - FUJIDROP_OAUTH_PORT=8089
+      # Frame.io tokens (from .env file, not committed to git)
+      # Set FUJIDROP_ACCESS_TOKEN and FUJIDROP_REFRESH_TOKEN in .env
+    volumes:
+      # Database persistence
+      - ./fujidrop.db:/app/fujidrop.db
+      # Images persistence
+      - ./images:/app/images
+      # Google credentials (if you want to mount them)
+      # - ./backend/services/client_secret.json:/app/backend/services/client_secret.json:ro
+      # - ./backend/services/token.json:/app/backend/services/token.json
+    healthcheck:
+      # Health check using Python (curl not available in slim image)
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/v2/health')"]
+      interval: 60s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+    networks:
+      - fujidrop-network
+
+networks:
+  fujidrop-network:
+    driver: bridge
+
